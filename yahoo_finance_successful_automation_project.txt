@@ -1,0 +1,75 @@
+import gspread
+from google.oauth2.service_account import Credentials
+import requests
+
+# Define the scope for Google Sheets API
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+# Path to your service account JSON file
+service_account_file = 'C:\\Users\\PC\\yahoo_finance\\yahoofinace-58ff6d12b7fe.json'
+
+# Function to fetch live price using Alpha Vantage API
+def get_live_price(symbol):
+    try:
+        # Replace with your actual Alpha Vantage API key
+        api_key = 'YOUR_ALPHA_VANTAGE_API_KEY'
+        url = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={api_key}'
+        response = requests.get(url)
+        data = response.json()
+        if 'Global Quote' in data:
+            return float(data['Global Quote']['05. price'])  # Adjust based on API response format
+        else:
+            raise ValueError(f"Failed to fetch price for {symbol}: {data.get('Error Message', 'Unknown error')}")
+    except Exception as e:
+        raise ValueError(f"Failed to fetch price for {symbol}: {str(e)}")
+
+try:
+    # Authenticate using the service account JSON file
+    creds = Credentials.from_service_account_file(service_account_file, scopes=scope)
+
+    # Connect to the Google Sheets API
+    client = gspread.authorize(creds)
+
+    # Example function to get top NYSE tickers (replace with your preferred method)
+    def get_top_nyse_tickers(num):
+        # Replace with your method to fetch top tickers from NYSE
+        return ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'FB', 'NVDA', 'NFLX', 'PYPL', 'INTC']
+
+    # Get the top 10 stocks currently trading on NYSE
+    top_10_stocks = get_top_nyse_tickers(10)
+
+    # Create a list of lists with headers and stock data
+    rows = [['Stock', 'Price']]
+    for stock in top_10_stocks:
+        try:
+            price = get_live_price(stock)  # Fetch live price using the defined function
+            rows.append([stock, price])
+        except Exception as e:
+            print(f"Error fetching price for {stock}: {e}")
+
+    # Print all rows as a single nested list
+    print(rows)
+
+    # Optional: Write data to Google Sheets
+    # Open the spreadsheet by its exact key or name
+    workbook = client.open_by_key("19oR8TvXIjkqPBE6SbNAwfzO0Lj5_NgiPQZTtNzsVZAs")
+    current_sheet = workbook.worksheet("Yahoo Finance")
+
+    # Clear existing data in the worksheet (optional)
+    current_sheet.clear()
+
+    # Update Google Sheets with the top 10 stocks data
+    cell_list = current_sheet.range(f'A1:B{len(rows)}')
+    for i, row in enumerate(rows):
+        for j, value in enumerate(row):
+            cell_list[i * 2 + j].value = value
+    current_sheet.update_cells(cell_list)
+
+except FileNotFoundError:
+    print(f"File '{service_account_file}' not found.")
+
+except gspread.exceptions.SpreadsheetNotFound:
+    print("Spreadsheet not found.")
+
+except Exception as e:
+    print(f"An error occurred: {e}")
