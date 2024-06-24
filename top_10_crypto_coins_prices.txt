@@ -1,0 +1,75 @@
+import gspread
+from google.oauth2.service_account import Credentials
+import yfinance as yf
+import time
+
+# Define the scope for Google Sheets API
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
+# Path to your service account JSON file
+service_account_file = 'C:\\Users\\PC\\Crypto_prices\\crypto-prices-427417-7554682e4b24.json'
+
+# Function to fetch live cryptocurrency price using Yahoo Finance via yfinance
+def get_live_price(symbol):
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period='1d')
+        if not data.empty:
+            return data['Close'].iloc[-1]
+        else:
+            raise ValueError(f"Failed to fetch price for {symbol}: No data available")
+    except Exception as e:
+        raise ValueError(f"Failed to fetch price for {symbol}: {str(e)}")
+
+try:
+    # Authenticate using the service account JSON file
+    creds = Credentials.from_service_account_file(service_account_file, scopes=scope)
+
+    # Connect to the Google Sheets API
+    client = gspread.authorize(creds)
+
+    # Function to get top cryptocurrency tickers
+    def get_top_crypto_coins(num):
+        # Example of top cryptocurrencies listed on Yahoo Finance
+        return ['BTC-USD', 'ETH-USD', 'USDT-USD', 'BNB-USD', 'SOL1-USD', 'USDC-USD', 'STETH-USD', 'XRP-USD', 'TON1-USD', 'DOGE-USD']
+
+    # Get the top 10 cryptocurrencies
+    top_10_coins = get_top_crypto_coins(10)
+
+    # Create a list of lists with headers and cryptocurrency data
+    rows = [['Crypto', 'Price (USD)']]
+    for coin in top_10_coins:
+        try:
+            symbol = coin.split('-')[0]  # Extracting the symbol from ticker (e.g., BTC from BTC-USD)
+            price = get_live_price(coin)  # Fetch live price using yfinance
+            rows.append([symbol, price])
+            time.sleep(1)  # Adding a delay to avoid hitting API limits
+        except Exception as e:
+            print(f"Error fetching price for {coin}: {e}")
+
+    # Print all rows as a single nested list
+    print(rows)
+
+    # Optional: Write data to Google Sheets
+    # Open the spreadsheet by its exact key or name
+    workbook = client.open_by_key("1zj_5-aqCGppLaIOts6F4Xro-6RawI1K_tXgfV3f46SQ")
+    current_sheet = workbook.worksheet("Crypto Prices")
+
+    # Clear existing data in the worksheet (optional)
+    current_sheet.clear()
+
+    # Update Google Sheets with the top 10 cryptocurrency data
+    cell_list = current_sheet.range(f'A1:B{len(rows)}')
+    for i, row in enumerate(rows):
+        for j, value in enumerate(row):
+            cell_list[i * 2 + j].value = value
+    current_sheet.update_cells(cell_list)
+
+except FileNotFoundError:
+    print(f"File '{service_account_file}' not found.")
+
+except gspread.exceptions.SpreadsheetNotFound:
+    print("Spreadsheet not found.")
+
+except Exception as e:
+    print(f"An error occurred: {e}")
